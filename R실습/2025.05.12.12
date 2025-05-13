@@ -1,0 +1,62 @@
+library(dplyr)
+library(caret)
+install.packages("randomForest")
+library(randomForest)
+install.packages("xgboost")
+library(xgboost)
+install.packages("SHAPforxgboost")
+library(SHAPforxgboost)
+library(Matrix)
+library(ggplot2)
+
+# 랜덤 시드를 고정 : 매번 동일한 결과 재현
+set.seed(42)
+# heart_disease_uci.csv 파일 불러옴
+data <- read.csv("heart_disease_uci.csv")
+# num 컬럼의 값을 기준으로 0/1 이진 target 변수 생성 (num > 0이면 1, 아니면 0)
+data$target <- ifelse(data$num > 0, 1, 0)
+# 모든 열에 NA, 빈문자("")가 없는 행만 필터링해서 data2에 저장
+data2 <- filter(data, if_all(everything(),
+				 ~!is.na(.) & .!=""))
+# id, num 컬럼 제외하고 분석에 사용할 변수들만 남김
+data2sub <- subset(data2, select=c(-id, -num))
+# target 값을 기준으로 80%의 훈련 데이터 인덱스를 생성
+train_index <- createDataPartition(data2sub$target,
+									  p=0.8, list=FALSE)
+# 훈련/테스트 데이터셋으로 분할
+train_data <- data2sub[train_index, ]
+test_data <- data2sub[-train_index, ]
+
+# 로지스틱 회귀 모델 생성 (이항 : binomial)
+logit_model <- glm(target ~ ., data=train_data,
+					 family = binomial)
+# 단계적 선택법 (stepwise selection)으로 최종 모델 요약 출력
+summary(step(logit_model))
+
+#2 
+# 회귀모델에서 회귀계수(coefficient)만 추출해서 df로 변환
+logit_importance <- as.data.frame(summary(step(logit_model))$coefficients)
+# rownames에 있는 변수명을 새로 만든 열 'variable'로 저장
+logit_importance$Variable <- rownames(logit_importance)
+# 열 이름을 보기 좋게 변경
+colnames(logit_importance) <- c("Estimate", "std. Error",
+								   "z value", "Pr(>|z|)", "Variable")
+# ggplot으로 시각화 시작
+ggplot(logit_importance,
+		# x축 : 회귀계수의 절댓값 기준으로 변수명 정렬, y축 : 절댓값
+		aes(x = reorder(Variable, abs(Estimate)),
+			y = abs(Estimate))) +
+		# 막대그래프 생성, height는 y값 그대로(identity), 색상은 steelblue
+		geom_bar(stat="identity", fill = "steelblue") +
+		# x축과 y축을 서로 뒤바꿔서 가로 막대그래프 생성
+		coord_flip() +
+		# 그래프 제목과 x, y축 라벨 설정
+		labs(title = "Logistic Regression Feature Importance",
+			 x = "Variabel",
+			 y = "Absolute Coefficient") +
+		# 배경 그리드 제거 (깔끔한 그래프 스타일)
+		theme_minimal()
+
+
+
+
